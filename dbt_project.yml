@@ -32,6 +32,24 @@ vars:
     audit_log: 3
     advanced_analytics: 4
 
+  # Account health scoring. Weights are configuration rather than constants because getting
+  # these wrong is an argument with the revenue team, not a code change.
+  #
+  # Frequency is weighted above magnitude on purpose: the decline in usage is the early signal,
+  # and revenue is the late one. An account losing engagement while still paying is the one
+  # worth calling.
+  health_weights:
+    recency: 0.35
+    frequency: 0.30
+    trend: 0.20
+    magnitude: 0.15
+
+  # Weeks of silence after which an account counts as dormant rather than merely light.
+  health_dormant_after_weeks: 4
+  # Usage ratio against the previous four weeks below which an account is called declining
+  # regardless of its overall score.
+  health_declining_trend_ratio: 0.60
+
 models:
   saas_metrics_dw:
     staging:

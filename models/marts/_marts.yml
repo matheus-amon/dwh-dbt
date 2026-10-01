@@ -214,3 +214,82 @@ models:
         data_tests:
           - not_null
           - expect_non_negative
+
+  - name: mart_account_health
+    description: >
+      Account health scorecard: which paying accounts are worth calling, and why. This is the
+      mart the generator's behaviour model exists to feed — accounts that churn show a decline
+      in weekly usage beforehand, so ranking on recency, frequency and trend surfaces them
+      before the revenue is gone.
+
+      Measured as of the latest week in the data, so it is a "who needs attention today" list
+      rather than a time series. Only accounts still paying appear: a churned account is not at
+      risk, it is gone.
+
+      Scoring is deliberately transparent — four components on 0-100, combined with weights from
+      dbt_project.yml. Frequency is weighted above magnitude because the decline in usage is the
+      early signal and revenue is the late one.
+    columns:
+      - name: account_id
+        description: Natural key. One row per paying account.
+        data_tests:
+          - unique
+          - not_null
+      - name: fk_account
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: sk_account
+      - name: plan_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_plans')
+                field: plan_code
+      - name: as_of_week
+        description: Latest week with usage. The scorecard is measured as of here.
+        data_tests:
+          - not_null
+      - name: health_score
+        description: Weighted average of the four component scores, on 0-100.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+      - name: health_band
+        description: >
+          healthy / at_risk / declining / critical / dormant. Dormant is checked first and is not
+          simply a low score: an account with no events in four weeks is a different conversation
+          from one whose engagement halved.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["healthy", "at_risk", "declining", "critical", "dormant"]
+      - name: needs_attention
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: usage_trend_ratio
+        description: >
+          Last four weeks against the previous four. Kept alongside the scores because a score
+          that hides its own inputs is not arguable with the revenue team.
+      - name: recency_score
+        description: >
+          Full marks if active this week, zero after eight weeks of silence.
+      - name: frequency_score
+        description: >
+          Recent activity against this account's own peak week, so the score means 'as active as
+          it gets' rather than 'busy in absolute terms'.
+      - name: trend_score
+        description: This window against the previous one.
+      - name: magnitude_score
+        description: >
+          Where the account's MRR sits among peers on the same plan, as a percentile.
