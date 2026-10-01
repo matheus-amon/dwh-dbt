@@ -1,4 +1,19 @@
-profiles.yml 
+# Byte-compiled / cache
 target/
 dbt_packages/
 logs/
+dbt_semantic_interfaces/
+
+# profiles.yml holds credentials. It is generated locally or written by CI from secrets.
+profiles.yml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/
+*.iml
+.DS_Store

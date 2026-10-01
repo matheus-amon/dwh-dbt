@@ -1,15 +1,18 @@
-Welcome to your new dbt project!
+# saas-metrics-dwh
 
-### Using the starter project
+The dbt warehouse. It turns the `raw_*` tables produced by
+[`dwh-config-local`](https://github.com/matheus-amon/dwh-config-local) into a star schema
+and four SaaS revenue marts.
 
-Try running the following commands:
-- dbt run
-- dbt test
+Under construction — see [`saas-dwh-pipelines`](https://github.com/matheus-amon/saas-dwh-pipelines)
+for the Airflow layer that runs it.
 
+## Lineage
 
-### Resources:
-- Learn more about dbt [in the docs](https://docs.getdbt.com/docs/introduction)
-- Check out [Discourse](https://discourse.getdbt.com/) for commonly asked questions and answers
-- Join the [chat](https://community.getdbt.com/) on Slack for live discussions and support
-- Find [dbt events](https://events.getdbt.com) near you
-- Check out [the blog](https://blog.getdbt.com/) for the latest news on dbt's development and best practices
+Independent implementation, inspired by Airflow/dbt workshop material the author worked
+through. No code is reused from it. The domain, model names, structure and metrics here are
+original to this project.
+
+## Licence
+
+MIT
