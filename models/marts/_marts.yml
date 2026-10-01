@@ -75,3 +75,63 @@ models:
           Share of the opening MRR base surviving churn and contraction.
       - name: logo_churn_rate
         description: Share of accounts lost in the month.
+
+  - name: mart_cohort_retention
+    description: >
+      How long accounts from each signup month keep paying, and how much revenue they keep.
+      Grain is signup month × signup tier × month since signup; segmenting by signup tier is
+      what answers whether revenue leakage is small accounts leaking or large ones.
+
+      Retention counts accounts still paying at the end of each period, matching how
+      mart_mrr_movement defines the closing balance. `max_observed_months` is carried on every
+      row because the final period of each cohort is truncated by the data window: comparing
+      the last row of an 18-month-old cohort against a 2-month-old one is otherwise
+      indistinguishable from a retention cliff.
+    columns:
+      - name: signup_month
+        description: First day of the month the cohort arrived.
+        data_tests:
+          - not_null
+      - name: plan_code_at_signup
+        description: Tier the cohort signed up on.
+        data_tests:
+          - not_null
+      - name: tenure_month_number
+        description: >
+          1 in the arrival month, incrementing monthly. Together with signup_month and
+          plan_code_at_signup this is the grain of the table.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: cohort_month_year
+        description: Sortable 'YYYY-MM' label of the cohort, not of the observed period.
+        data_tests:
+          - not_null
+      - name: months_since_signup
+        description: tenure_month_number minus one, so arrival is month 0.
+        data_tests:
+          - not_null
+      - name: cohort_accounts
+        description: Accounts that arrived in this cohort. The denominator for retention.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: retained_accounts
+        description: Accounts still paying at the end of the period.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: account_retention_rate
+        description: Share of the cohort still paying. Bounded by 1.
+      - name: mrr_retention_index
+        description: >
+          Retained MRR against the cohort's opening MRR. Deliberately an index and not a rate:
+          a cohort that expands after signing up holds more revenue than it arrived with, so
+          this legitimately exceeds 1.
+      - name: max_observed_months
+        description: >
+          How far this cohort could be observed before the data window ends. The last period
+          of each cohort is truncated, and this is what makes that visible.
