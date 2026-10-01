@@ -22,10 +22,12 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
+        # The image reads POSTGRES_*; WAREHOUSE_* is the generator's own naming and the image
+        # has never heard of it.
         env:
-          WAREHOUSE_DB: saas_dw
-          WAREHOUSE_USER: saas
-          WAREHOUSE_PASSWORD: saas
+          POSTGRES_DB: saas_dw
+          POSTGRES_USER: saas
+          POSTGRES_PASSWORD: saas
         ports:
           - 5432:5432
         options: >-
@@ -35,11 +37,13 @@ jobs:
           --health-retries 12
 
     env:
-      # Read by both the generator's loader and the dbt profile written below.
-      WAREHOUSE_DB: saas_dw
-      WAREHOUSE_USER: saas
-      WAREHOUSE_PASSWORD: saas
-      WAREHOUSE_PORT: 5432
+      # Read by both the generator's loader and the dbt profile written below. POSTGRES_* names
+      # are used rather than WAREHOUSE_* so the same variables configure the service container
+      # and the tooling.
+      POSTGRES_DB: saas_dw
+      POSTGRES_USER: saas
+      POSTGRES_PASSWORD: saas
+      POSTGRES_PORT: 5432
       POSTGRES_HOST: localhost
 
     steps:
@@ -83,10 +87,10 @@ jobs:
               ci:
                 type: postgres
                 host: "{{ env_var('POSTGRES_HOST') }}"
-                port: "{{ env_var('WAREHOUSE_PORT') | int }}"
-                dbname: "{{ env_var('WAREHOUSE_DB') }}"
-                user: "{{ env_var('WAREHOUSE_USER') }}"
-                password: "{{ env_var('WAREHOUSE_PASSWORD') }}"
+                port: "{{ env_var('POSTGRES_PORT') | int }}"
+                dbname: "{{ env_var('POSTGRES_DB') }}"
+                user: "{{ env_var('POSTGRES_USER') }}"
+                password: "{{ env_var('POSTGRES_PASSWORD') }}"
                 schema: public
                 threads: 4
                 connect_timeout: 10
