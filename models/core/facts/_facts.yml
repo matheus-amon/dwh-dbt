@@ -101,3 +101,71 @@ models:
           - accepted_values:
               arguments:
                 values: [true, false]
+
+  - name: fct_product_events
+    description: >
+      Product telemetry at event grain. The only incremental model in the warehouse:
+      configured in dbt_project.yml with `merge` on `event_id`.
+
+      The incremental filter is a one-day lookback from the high-water mark rather than a
+      strict `> max(event_ts)`, because event ids increase with time and the merge is keyed
+      on event_id, so re-reading a day is idempotent. Without it, an event whose timestamp is
+      slightly behind the high-water mark would be dropped forever.
+    columns:
+      - name: event_id
+        description: Unique per event and monotonic with event_ts.
+        data_tests:
+          - unique
+          - not_null
+      - name: fk_account
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: sk_account
+      - name: fk_user
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_users')
+                field: sk_user
+      - name: fk_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: sk_date
+      - name: event_ts
+        data_tests:
+          - not_null
+      - name: feature
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - core
+                  - core_dashboard
+                  - data_export
+                  - api_access
+                  - sso
+                  - audit_log
+                  - advanced_analytics
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["web", "ios", "android", "api"]
+      - name: session_id
+        data_tests:
+          - not_null
+      - name: days_since_spine_start
+        description: >
+          Monotonic ordering key. Incremental runs select on event_ts; this makes the
+          relationship to the date spine explicit for anything ordering by the spine.
+        data_tests:
+          - expect_non_negative
