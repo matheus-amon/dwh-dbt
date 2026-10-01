@@ -169,3 +169,62 @@ models:
           relationship to the date spine explicit for anything ordering by the spine.
         data_tests:
           - expect_non_negative
+
+  - name: fct_account_weekly_usage
+    description: >
+      Weekly product usage per account, aggregated from the event fact. This is where the
+      decline-before-churn behaviour becomes visible: `event_count` trending down over the
+      weeks before a cancellation is the signal `mart_account_health` ranks accounts on.
+
+      One row per account per week that had at least one event. A silent week is an absence
+      rather than a zero row, and the health mart reads that difference deliberately.
+    columns:
+      - name: sk_account_week
+        data_tests:
+          - unique
+          - not_null
+      - name: fk_account
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: sk_account
+      - name: account_id
+        data_tests:
+          - not_null
+      - name: week_start_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: month_start_date
+        description: >
+          The month this week falls in. Carried so the health mart can join weekly usage to
+          MRR without going back to the calendar.
+        data_tests:
+          - not_null
+      - name: event_count
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: session_count
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: active_user_count
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: is_active_week
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: api_event_share
+        description: >
+          Share of the week's events on the API platform. NULL rather than 0 for a week with no
+          events, per the safe_divide convention.
