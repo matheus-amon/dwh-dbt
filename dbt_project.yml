@@ -1,0 +1,48 @@
+name: "saas_metrics_dw"
+version: "1.0.0"
+config-version: 2
+
+profile: "saas_metrics_dw"
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+vars:
+  # The warehouse is built from a rolling 24-month window by the generator. The date spine
+  # spans a little wider so period-over-period comparisons have a full prior year.
+  date_spine_start_date: "2023-01-01"
+
+models:
+  saas_metrics_dw:
+    staging:
+      +materialized: view
+      +schema: staging
+    core:
+      +materialized: table
+      +schema: core
+      # The event fact grows with the telemetry stream; it does not need a full rebuild.
+      facts:
+        fct_product_events:
+          +materialized: incremental
+          +incremental_strategy: merge
+          +unique_key: event_id
+    marts:
+      +materialized: table
+      +schema: marts
+
+snapshots:
+  saas_metrics_dw:
+    +schema: core
+
+tests:
+  saas_metrics_dw:
+    +store_failures: true
+    +schema: dbt_test_failures
+
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: true
+  source_freshness_run_project_hooks: false

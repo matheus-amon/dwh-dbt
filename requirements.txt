@@ -1,0 +1,4 @@
+# Local development / CI dependencies for the warehouse.
+# dbt-postgres pins the adapter to a version compatible with the installed dbt-core.
+dbt-core==1.12.5
+dbt-postgres==1.11.0
