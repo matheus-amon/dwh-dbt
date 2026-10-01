@@ -16,6 +16,22 @@ vars:
   # spans a little wider so period-over-period comparisons have a full prior year.
   date_spine_start_date: "2023-01-01"
 
+  # Product catalog metadata: the lowest plan tier that can reach each feature. Mirrors the
+  # plan catalogue in saas-telemetry-lab, which is what gates telemetry at generation time.
+  #
+  # This coupling is real and deliberate but worth stating: without it, a gated feature reads
+  # as 0% adoption on the tiers that cannot reach it, when the truth is that it is unreachable
+  # there. Feature availability is product data, not warehouse data, so it lives here rather
+  # than being inferred from the event stream.
+  feature_min_tier:
+    core: 0
+    core_dashboard: 1
+    data_export: 2
+    api_access: 2
+    sso: 3
+    audit_log: 3
+    advanced_analytics: 4
+
 models:
   saas_metrics_dw:
     staging:

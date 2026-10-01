@@ -35,9 +35,10 @@ models:
           - not_null
           - expect_non_negative
       - name: net_new_mrr_usd
-        description: new + expansion - contraction - churned.
-        data_tests:
-          - expect_non_negative
+        description: >
+          new + expansion - contraction - churned. A delta, so it is legitimately negative in a
+          month where losses outweigh gains — which is the month a finance team asks about. No
+          range test; expect_non_negative belongs on the measures, not on the deltas.
       - name: new_mrr_usd
         data_tests:
           - not_null
@@ -135,3 +136,81 @@ models:
         description: >
           How far this cohort could be observed before the data window ends. The last period
           of each cohort is truncated, and this is what makes that visible.
+
+  - name: mart_product_adoption
+    description: >
+      Feature adoption per month, per plan tier. The point of the mart is separating "nobody
+      adopted it" from "nobody could reach it": a gated feature scores zero adoption on every
+      tier below its gate, which is not a product problem. Each row therefore carries both the
+      accounts on the tier and the accounts entitled to the feature, and the headline rate is
+      over the entitled set.
+
+      Usage is attributed per event to the tier the account held when the event happened, not
+      to the tier at month end. Crediting the whole month to the month-end tier places
+      gated-feature usage below the gate that entitles it.
+
+      The grid is the full month x plan x feature cross product, so an unused feature reads as a
+      zero rather than a missing row.
+    columns:
+      - name: sk_feature_adoption
+        description: Surrogate key over month, feature and plan.
+        data_tests:
+          - unique
+          - not_null
+      - name: month_start_date
+        data_tests:
+          - not_null
+      - name: feature
+        data_tests:
+          - not_null
+      - name: plan_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_plans')
+                field: plan_code
+      - name: min_tier_rank
+        description: >
+          Lowest tier that can reach this feature, from the feature_min_tier var. Product
+          catalog metadata, declared in dbt_project.yml rather than inferred from the events.
+        data_tests:
+          - not_null
+      - name: is_plan_entitled
+        description: Whether this tier can reach the feature at all.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: eligible_accounts
+        description: >
+          Accounts that occupied this tier at any point in the month. A mid-month upgrade counts
+          an account for both tiers, which matches the per-event numerator.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: entitled_accounts
+        description: >
+          Zero when the tier cannot reach the feature. Zero rather than NULL so the rate over
+          the entitled set is never diluted by tiers that were never candidates.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: accounts_using_feature
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: adoption_rate
+        description: Share of accounts on the tier that used the feature.
+      - name: entitled_adoption_rate
+        description: >
+          Share of entitled accounts that used it. NULL when nobody on the tier is entitled,
+          because the question does not apply there.
+      - name: entitled_not_adopting
+        description: >
+          Entitled accounts not using the feature. This is the expansion opportunity, and it is
+          only meaningful once the entitled set is separated from the whole tier.
+        data_tests:
+          - not_null
+          - expect_non_negative

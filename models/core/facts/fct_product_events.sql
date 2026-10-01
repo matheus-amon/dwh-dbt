@@ -8,6 +8,12 @@
     `> max(event_ts)`. Event ids increase with time and the merge is keyed on event_id, so
     re-reading a day is idempotent — which matters because a real pipeline will emit events
     whose event_ts is slightly older than the last one it wrote.
+
+    Operational caveat, learned the hard way: a merge only inserts and updates, it never
+    deletes. If the source is reseeded or truncated — regenerating the synthetic dataset, for
+    instance — rows in this table whose events no longer exist upstream survive as orphans and
+    quietly distort anything built on top. Re-run with --full-refresh whenever the source is
+    rebuilt rather than appended to.
 #}
 
 with source as (
