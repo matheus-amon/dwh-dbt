@@ -1,0 +1,240 @@
+version: 2
+
+models:
+  - name: stg_plans
+    description: >
+      Plan catalogue, one row per tier. Static reference data, passed through with explicit
+      casts. `tier_rank` is the ordering every other model uses for feature gating and for
+      deciding whether a plan change was an upgrade.
+    columns:
+      - name: plan_code
+        description: Stable key for the tier.
+        data_tests:
+          - unique
+          - not_null
+      - name: plan_name
+        data_tests:
+          - not_null
+      - name: monthly_price_usd
+        description: List price per month at the included seat count.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: included_seats
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: billing_interval
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["monthly", "annual"]
+      - name: tier_rank
+        description: 1-based tier ordering, 1 = starter through 4 = enterprise.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+                inclusive: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          # Declared at model level: this macro takes no column_name, so it cannot sit under
+          # a column. Guards against two tiers sharing a rank, which would break feature
+          # gating and make an upgrade indistinguishable from a downgrade.
+          arguments:
+            combination_of_columns: ["tier_rank"]
+
+  - name: stg_accounts
+    description: >
+      Account master. Adds the cohort anchor (`signup_month`) and the churn flag every
+      downstream model reads, so the cohort logic exists in exactly one place.
+    columns:
+      - name: account_id
+        data_tests:
+          - unique
+          - not_null
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: signup_month
+        description: First day of the month the account signed up. Cohort key.
+        data_tests:
+          - not_null
+      - name: is_churned
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["active", "churned"]
+      - name: churned_at
+        description: >
+          Null while the account is active. A churn closes the account's last subscription
+          term, so a churned account has no open term — see
+          tests/assert_subscription_term_cardinality.sql.
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> '2000-01-01'"
+              config:
+                where: "is_churned"
+      - name: days_to_churn
+        description: Days from signup to churn. Null for accounts that never churned.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
+  - name: stg_users
+    description: >
+      People inside accounts. One admin per account by construction, which the test below
+      asserts rather than assumes.
+    columns:
+      - name: user_id
+        data_tests:
+          - unique
+          - not_null
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_accounts')
+                field: account_id
+      - name: email
+        data_tests:
+          - unique
+          - not_null
+      - name: role
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["admin", "member", "analyst", "viewer"]
+      - name: is_admin
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: last_seen_at
+        description: Null only for a user who has never been seen since being created.
+
+  - name: stg_subscriptions
+    description: >
+      One row per uninterrupted period an account spent on a plan. The closed-term flags are
+      what the MRR movement mart turns into new / expansion / contraction / churn.
+    columns:
+      - name: subscription_id
+        data_tests:
+          - unique
+          - not_null
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_accounts')
+                field: account_id
+      - name: plan_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_plans')
+                field: plan_code
+      - name: mrr_usd
+        description: Recurring revenue for the term, net of discount.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: term_start_month
+        description: First day of the month the term began.
+        data_tests:
+          - not_null
+      - name: is_current_term
+        description: True for the one term an account has open. Exactly one per account.
+        data_tests:
+          - not_null
+      - name: ended_reason
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["upgraded", "downgraded", "churned"]
+              config:
+                where: "is_closed_term"
+      - name: term_length_days
+        description: Null while the term is open.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: stg_product_events
+    description: >
+      Product telemetry, one row per action. Adds the week grain used by the weekly usage fact
+      and separates entitled features from universally available ones.
+    columns:
+      - name: event_id
+        data_tests:
+          - unique
+          - not_null
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_accounts')
+                field: account_id
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_users')
+                field: user_id
+      - name: feature
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - core
+                  - core_dashboard
+                  - data_export
+                  - api_access
+                  - sso
+                  - audit_log
+                  - advanced_analytics
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["web", "ios", "android", "api"]
+      - name: session_id
+        data_tests:
+          - not_null
+      - name: event_week_start
+        description: Sunday of the event's week.
+        data_tests:
+          - not_null
+      - name: is_gated_feature
+        description: >
+          True for features that only exist above the starter tier. Lets the adoption mart
+          distinguish "nobody adopted it" from "nobody could reach it".
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+
