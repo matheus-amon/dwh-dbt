@@ -1,0 +1,118 @@
+name: dbt
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test the warehouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          WAREHOUSE_DB: saas_dw
+          WAREHOUSE_USER: saas
+          WAREHOUSE_PASSWORD: saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U saas -d saas_dw"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # Read by both the generator's loader and the dbt profile written below.
+      WAREHOUSE_DB: saas_dw
+      WAREHOUSE_USER: saas
+      WAREHOUSE_PASSWORD: saas
+      WAREHOUSE_PORT: 5432
+      POSTGRES_HOST: localhost
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt
+        run: pip install -r data_warehouse/requirements.txt
+
+      # The raw layer is generated, not committed, so CI builds it from the generator that
+      # owns it rather than from a fixture committed here. That keeps the two repositories
+      # honest about their contract: if the generator's schema drifts from these sources, this
+      # job fails instead of drifting quietly.
+      - name: Check out the generator
+        uses: actions/checkout@v4
+        with:
+          repository: matheus-amon/dwh-config-local
+          path: _generator
+
+      - name: Install the generator
+        run: pip install "faker>=37" "duckdb>=1.3" "numpy>=2.2" "pandas>=2.2" "psycopg[binary]>=3.2"
+
+      - name: Generate the raw layer
+        working-directory: _generator
+        # 200k events rather than the full million: CI needs the warehouse to be exercised, and
+        # mart_account_health is the only mart whose shape depends on telemetry density.
+        run: |
+          python -m src.telemetry_lab.cli generate --output-dir ci_raw --events 200000
+          python -m src.telemetry_lab.cli load --input-dir ci_raw
+
+      - name: Write the dbt profile
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'PROFILE'
+          saas_metrics_dw:
+            target: ci
+            outputs:
+              ci:
+                type: postgres
+                host: "{{ env_var('POSTGRES_HOST') }}"
+                port: "{{ env_var('WAREHOUSE_PORT') | int }}"
+                dbname: "{{ env_var('WAREHOUSE_DB') }}"
+                user: "{{ env_var('WAREHOUSE_USER') }}"
+                password: "{{ env_var('WAREHOUSE_PASSWORD') }}"
+                schema: public
+                threads: 4
+                connect_timeout: 10
+          PROFILE
+
+      - name: dbt deps
+        working-directory: data_warehouse
+        run: dbt deps
+
+      - name: dbt parse
+        working-directory: data_warehouse
+        run: dbt parse --no-partial-parse
+
+      # Full refresh, because CI starts from an empty database and an incremental merge would
+      # leave the event fact with rows from a previous run if the job were ever re-run against
+      # a warm database.
+      - name: dbt build
+        working-directory: data_warehouse
+        run: dbt build --full-refresh
+
+      - name: Publish the warehouse as a build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mart-csv
+          path: |
+            data_warehouse/target/manifest.json
+            data_warehouse/target/run_results.json
+          retention-days: 14
