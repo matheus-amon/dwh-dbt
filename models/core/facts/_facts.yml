@@ -1,0 +1,103 @@
+version: 2
+
+models:
+  - name: fct_subscription_periods
+    description: >
+      The central revenue fact. One row per account per month, holding the MRR in force at
+      month end and the movement flags derived by comparing against the previous month.
+
+      A plan change mid-month does not produce two rows: the term in force at month end wins,
+      and `terms_in_month` records that more than one term touched the month. Movement
+      classification lives here rather than in the mart so every consumer reads it the same
+      way.
+    columns:
+      - name: sk_subscription_period
+        description: Surrogate key over account and month.
+        data_tests:
+          - unique
+          - not_null
+      - name: fk_account
+        description: Foreign key onto dim_accounts.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: sk_account
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: account_id
+      - name: month_start_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: fk_plan
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_plans')
+                field: sk_plan
+      - name: plan_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_plans')
+                field: plan_code
+      - name: tenure_month_number
+        description: >
+          1 in the account's first month, incrementing monthly. This is the cohort offset the
+          retention mart groups by.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: mrr_usd
+        description: MRR in force at month end.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: prior_mrr_usd
+        description: MRR in force at the end of the previous month. Null in the first month.
+      - name: mrr_change_usd
+        description: >
+          Movement against the previous month. Negative during a contraction, so no range
+          test here; expect_non_negative applies to the measures, not to the deltas.
+      - name: is_first_month
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: is_churned_month
+        description: >
+          The account's term closed with a churn inside this month. The month is still
+          counted as active, and the mart subtracts it from the closing balance of this month
+          and every month after, which is why an account has no rows once it has churned.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: is_expansion
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: is_contraction
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
