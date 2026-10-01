@@ -10,6 +10,12 @@ models:
       and `terms_in_month` records that more than one term touched the month. Movement
       classification lives here rather than in the mart so every consumer reads it the same
       way.
+    data_tests:
+      - expect_grain_unique:
+          # The documented grain, asserted on the natural columns. Testing the surrogate key
+          # instead would pass even if the grain changed, because the key is derived from it.
+          arguments:
+            columns: ["account_id", "month_start_date"]
     columns:
       - name: sk_subscription_period
         description: Surrogate key over account and month.
@@ -178,6 +184,10 @@ models:
 
       One row per account per week that had at least one event. A silent week is an absence
       rather than a zero row, and the health mart reads that difference deliberately.
+    data_tests:
+      - expect_grain_unique:
+          arguments:
+            columns: ["account_id", "week_start_date"]
     columns:
       - name: sk_account_week
         data_tests:

@@ -88,6 +88,13 @@ models:
       row because the final period of each cohort is truncated by the data window: comparing
       the last row of an 18-month-old cohort against a 2-month-old one is otherwise
       indistinguishable from a retention cliff.
+    data_tests:
+      - expect_grain_unique:
+          # Asserts the documented grain on the natural columns rather than on a surrogate key
+          # derived from them: a grain that silently changes would carry the hash with it and
+          # keep passing.
+          arguments:
+            columns: ["signup_month", "plan_code_at_signup", "tenure_month_number"]
     columns:
       - name: signup_month
         description: First day of the month the cohort arrived.
@@ -151,6 +158,10 @@ models:
 
       The grid is the full month x plan x feature cross product, so an unused feature reads as a
       zero rather than a missing row.
+    data_tests:
+      - expect_grain_unique:
+          arguments:
+            columns: ["month_start_date", "feature", "plan_code"]
     columns:
       - name: sk_feature_adoption
         description: Surrogate key over month, feature and plan.
