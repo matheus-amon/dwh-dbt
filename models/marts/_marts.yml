@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: mart_mrr_movement
+    description: >
+      MRR movement, one row per month. Reads the movement flags off the subscription fact
+      rather than re-deriving them, so this mart and the fact cannot disagree.
+
+      Contraction and churned MRR are positive magnitudes and net new subtracts them, which
+      makes `beginning + net new = ending` an identity rather than an approximation. Tests
+      assert_mrr_movement_reconciles.sql pins it exactly.
+
+      Every month in the spine gets a row, including months with no activity, so a gap in the
+      series is visible instead of silently absent.
+    columns:
+      - name: month_start_date
+        description: First day of the month. Unique grain of the table.
+        data_tests:
+          - unique
+          - not_null
+      - name: month_year
+        description: Sortable 'YYYY-MM' label.
+        data_tests:
+          - not_null
+      - name: beginning_mrr_usd
+        description: Opening balance, equal to the prior month's closing balance.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: ending_mrr_usd
+        description: >
+          Closing balance. Excludes accounts that churned during the month, which is what makes
+          the reconciliation hold.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: net_new_mrr_usd
+        description: new + expansion - contraction - churned.
+        data_tests:
+          - expect_non_negative
+      - name: new_mrr_usd
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: expansion_mrr_usd
+        description: Revenue gained from existing accounts growing.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: contraction_mrr_usd
+        description: >
+          Revenue lost from existing accounts shrinking. Positive magnitude; net new subtracts
+          it.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: churned_mrr_usd
+        description: >
+          Revenue lost to churn, measured against each account's opening balance. Positive
+          magnitude; net new subtracts it.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: active_accounts
+        description: Paying accounts at month end.
+        data_tests:
+          - not_null
+          - expect_non_negative
+      - name: arpa_usd
+        description: >
+          Average revenue per active account. NULL when there are no active accounts, per the
+          safe_divide convention.
+      - name: gross_revenue_retention
+        description: >
+          Share of the opening MRR base surviving churn and contraction.
+      - name: logo_churn_rate
+        description: Share of accounts lost in the month.
