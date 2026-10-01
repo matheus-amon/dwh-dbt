@@ -47,9 +47,9 @@ jobs:
       POSTGRES_HOST: localhost
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -61,7 +61,7 @@ jobs:
       # honest about their contract: if the generator's schema drifts from these sources, this
       # job fails instead of drifting quietly.
       - name: Check out the generator
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: matheus-amon/dwh-config-local
           path: _generator
@@ -113,7 +113,7 @@ jobs:
 
       - name: Publish the warehouse as a build artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mart-csv
           path: |
